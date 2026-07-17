@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>taskctl — your task log</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #212236;
+    --surface-2: #292b45;
+    --border: #34364f;
+    --text: #e4e4f4;
+    --text-dim: #8a8caa;
+    --blue: #7c9fff;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --mono: 'JetBrains Mono', 'Consolas', monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 32px 20px;
+  }
+
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+  }
+
+  .title {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .title span { color: var(--blue); }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-top: 4px; font-family: var(--mono); }
+
+  .api-status {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+  .api-status.online { color: var(--green); border-color: var(--green); }
+  .api-status.offline { color: var(--red); border-color: var(--red); }
+
+  .stats {
+    display: flex;
+    gap: 18px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .stat b { font-size: 16px; display: block; }
+  .stat.todo b { color: var(--text-dim); }
+  .stat.progress b { color: var(--amber); }
+  .stat.done b { color: var(--green); }
+
+  .composer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 28px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .composer input, .composer select {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: var(--sans);
+    font-size: 14px;
+  }
+  .composer input[type="text"] { flex: 1; min-width: 200px; }
+  .composer button {
+    background: var(--blue);
+    color: #10111c;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: opacity 0.15s;
+  }
+  .composer button:hover { opacity: 0.85; }
+  .composer button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  @media (max-width: 800px) {
+    .board { grid-template-columns: 1fr; }
+  }
+
+  .column {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    min-height: 200px;
+  }
+  .col-head {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .col-head.todo-h { color: #9ba1c9; }
+  .col-head.progress-h { color: var(--amber); }
+  .col-head.done-h { color: var(--green); }
+
+  .empty-hint {
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 20px 4px;
+    opacity: 0.6;
+  }
+
+  .card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .card-hash {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--blue);
+    background: rgba(124,159,255,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .card-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 10px;
+  }
+  .card-title { font-size: 14px; line-height: 1.4; margin-bottom: 8px; word-break: break-word; }
+  .card-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .card-actions button {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 5px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 60px;
+  }
+  .card-actions button:hover { border-color: var(--blue); color: var(--blue); }
+  .card-actions button.del:hover { border-color: var(--red); color: var(--red); }
+
+  footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 30px;
+    opacity: 0.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title">task<span>ctl</span></div>
+      <div class="subtitle">$ your personal commit log for getting things done</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <span id="apiStatus" class="api-status offline">checking api...</span>
+      <div class="stats">
+        <div class="stat todo"><b id="countTodo">0</b>to do</div>
+        <div class="stat progress"><b id="countProgress">0</b>in progress</div>
+        <div class="stat done"><b id="countDone">0</b>done</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="composer">
+    <input type="text" id="taskInput" placeholder="what needs to be done? e.g. Solve 5 LeetCode array problems" maxlength="120">
+    <select id="tagInput">
+      <option value="DSA">DSA</option>
+      <option value="Python">Python</option>
+      <option value="Web Dev">Web Dev</option>
+      <option value="Maths">Maths</option>
+      <option value="Project">Project</option>
+      <option value="Hackathon">Hackathon</option>
+      <option value="Other">Other</option>
+    </select>
+    <button id="addBtn" onclick="addTask()">+ commit</button>
+  </div>
+
+  <div class="board">
+    <div class="column">
+      <div class="col-head todo-h"><span>to do</span></div>
+      <div id="col-todo"></div>
+    </div>
+    <div class="column">
+      <div class="col-head progress-h"><span>in progress</span></div>
+      <div id="col-progress"></div>
+    </div>
+    <div class="column">
+      <div class="col-head done-h"><span>done</span></div>
+      <div id="col-done"></div>
+    </div>
+  </div>
+
+  <footer id="footerNote">connecting to backend at http://127.0.0.1:8000 ...</footer>
+</div>
+
+<script>
+  // Change this if your Django server runs on a different host/port
+  const API_BASE = "http://127.0.0.1:8000/api";
+
+  let tasks = [];
+
+  async function checkApiStatus() {
+    const statusEl = document.getElementById('apiStatus');
+    const footerEl = document.getElementById('footerNote');
+    try {
+      const res = await fetch(`${API_BASE}/tasks/`);
+      if (res.ok) {
+        statusEl.textContent = "● api connected";
+        statusEl.className = "api-status online";
+        footerEl.textContent = "connected to Django REST Framework — data is saved permanently";
+        return true;
+      }
+    } catch (e) {
+      statusEl.textContent = "● api offline";
+      statusEl.className = "api-status offline";
+      footerEl.textContent = "backend not reachable — run `python manage.py runserver` and refresh this page";
+    }
+    return false;
+  }
+
+  async function loadTasks() {
+    try {
+      const res = await fetch(`${API_BASE}/tasks/`);
+      tasks = await res.json();
+      render();
+    } catch (e) {
+      console.error("Could not load tasks:", e);
+    }
+  }
+
+  async function addTask() {
+    const input = document.getElementById('taskInput');
+    const tagSelect = document.getElementById('tagInput');
+    const addBtn = document.getElementById('addBtn');
+    const title = input.value.trim();
+    if (!title) {
+      input.focus();
+      return;
+    }
+
+    addBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/tasks/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, tag: tagSelect.value, status: 'todo' })
+      });
+      if (!res.ok) throw new Error('Failed to create task');
+      input.value = "";
+      await loadTasks();
+    } catch (e) {
+      alert("Task save nahi hua — check if the Django server is running.");
+    }
+    addBtn.disabled = false;
+  }
+
+  async function moveTask(id, newStatus) {
+    try {
+      const res = await fetch(`${API_BASE}/tasks/${id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) throw new Error('Failed to update task');
+      await loadTasks();
+    } catch (e) {
+      alert("Status update nahi hua.");
+    }
+  }
+
+  async function deleteTask(id) {
+    try {
+      const res = await fetch(`${API_BASE}/tasks/${id}/`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete task');
+      await loadTasks();
+    } catch (e) {
+      alert("Delete nahi hua.");
+    }
+  }
+
+  function timeAgo(dateStr) {
+    const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+    return `${Math.floor(diff/86400)}d ago`;
+  }
+
+  function cardHTML(t) {
+    let actions = '';
+    if (t.status === 'todo') {
+      actions = `<button onclick="moveTask(${t.id},'progress')">→ start</button>`;
+    } else if (t.status === 'progress') {
+      actions = `<button onclick="moveTask(${t.id},'todo')">← back</button><button onclick="moveTask(${t.id},'done')">finish ✓</button>`;
+    } else {
+      actions = `<button onclick="moveTask(${t.id},'progress')">↺ reopen</button>`;
+    }
+    actions += `<button class="del" onclick="deleteTask(${t.id})">delete</button>`;
+
+    return `
+      <div class="card">
+        <div class="card-top">
+          <span class="card-hash">#${t.commit_hash}</span>
+          <span class="card-tag">${t.tag}</span>
+        </div>
+        <div class="card-title">${t.title}</div>
+        <div class="card-meta">committed ${timeAgo(t.created_at)}</div>
+        <div class="card-actions">${actions}</div>
+      </div>
+    `;
+  }
+
+  function render() {
+    const todo = tasks.filter(t => t.status === 'todo');
+    const progress = tasks.filter(t => t.status === 'progress');
+    const done = tasks.filter(t => t.status === 'done');
+
+    document.getElementById('col-todo').innerHTML = todo.length
+      ? todo.map(cardHTML).join('')
+      : '<div class="empty-hint">$ nothing queued — add a task above</div>';
+
+    document.getElementById('col-progress').innerHTML = progress.length
+      ? progress.map(cardHTML).join('')
+      : '<div class="empty-hint">$ nothing in progress</div>';
+
+    document.getElementById('col-done').innerHTML = done.length
+      ? done.map(cardHTML).join('')
+      : '<div class="empty-hint">$ nothing shipped yet</div>';
+
+    document.getElementById('countTodo').textContent = todo.length;
+    document.getElementById('countProgress').textContent = progress.length;
+    document.getElementById('countDone').textContent = done.length;
+  }
+
+  document.getElementById('taskInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') addTask();
+  });
+
+  (async function init() {
+    const online = await checkApiStatus();
+    if (online) await loadTasks();
+  })();
+</script>
+</body>
+</html>
